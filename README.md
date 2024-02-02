@@ -1,1 +1,7 @@
 # BYBIT-AIO
+
+ULTIMATE BYBIT API SCRYPT
+
+Гайд по ссылке https://the-flow.notion.site/BYBIT-AIO-c492bb4c8e204ac3862acf11123d6cfb
+
+Donate EVM 0xc44C43f50B6592502442a4FB569039e4D6D1c090
