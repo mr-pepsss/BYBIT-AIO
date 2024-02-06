@@ -181,12 +181,32 @@ def place_market_order(api_key, api_secret, symbol, side, quantity, proxy, decim
 def attempt_place_market_order(api_key, api_secret, symbol, side, quantity, proxy, decimal_places, account_id):
     retries = 0
     while retries < MAX_RETRIES:
-        print_yellow(f"Используемое количество для торговли на попытке {retries + 1}: {quantity}")
-        order_response_text = place_market_order(
-            api_key, api_secret, SYMBOL_TO_TRADE, TRADE_DIRECTION, quantity, proxy, decimal_places
-        )
+        # Получаем баланс валюты для торговли
+        if TRADE_DIRECTION == "SELL":
+            coin_to_check = TOKEN_1
+        else:
+            coin_to_check = TOKEN_2
+        
+        balance_info_text = get_coin_balance(api_key, api_secret, proxy, coin_to_check)
+        balance_info = json.loads(balance_info_text)
+        if 'result' in balance_info and 'balance' in balance_info['result']:
+            balance = float(balance_info['result']['balance']['walletBalance'])
+            print_yellow(f"Доступный баланс для {coin_to_check}: {balance}")
+        else:
+            print_red("Не удалось получить баланс.")
+            return None
 
+        # Рассчитываем количество для торговли
+        if EXCHANGE_AMOUNT is None:
+            # Используем весь доступный баланс с учетом кредитного плеча
+            quantity = balance * LEV
+        else:
+            quantity = EXCHANGE_AMOUNT
 
+        formatted_quantity = format_number(quantity, decimal_places)
+        print_green(f"Используемое количество для торговли на попытке {retries + 1}: {formatted_quantity}")
+        
+        order_response_text = place_market_order(api_key, api_secret, SYMBOL_TO_TRADE, TRADE_DIRECTION, formatted_quantity, proxy, decimal_places, 1) # is_leverage всегда 1, т.к. уже учли в quantity
 
         order_response = json.loads(order_response_text)
         if order_response['retCode'] == 0:
@@ -198,7 +218,8 @@ def attempt_place_market_order(api_key, api_secret, symbol, side, quantity, prox
             if retries < MAX_RETRIES:
                 print_yellow(f"Повторная попытка через {DELAY_BETWEEN_RETRIES} секунд...")
                 time.sleep(DELAY_BETWEEN_RETRIES)
-    return None  # Если все попытки неудачны
+    return None
+
 
 # Функция для загрузки информации об аккаунтах
 def load_accounts(filename='accounts.txt'):
