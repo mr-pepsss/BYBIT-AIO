@@ -17,6 +17,7 @@ from config import TOKEN, THRESHOLD, ACCOUNT_TYPE, ACCOUNT_DELAY_RANGE
 # ANSI escape codes
 GREEN = "\033[92m"
 RED = "\033[91m"
+YELLOW = "\033[93m" 
 ENDC = "\033[0m"
 
 def color_text(text, color_code):
@@ -87,19 +88,20 @@ def write_to_file(lock, filename, text):
         with open(filename, 'a') as file:
             file.write(text + "\n")
 
-def process_account(results, lock, account_id, api_key, api_secret, proxy, threshold=THRESHOLD):
+def process_account(results, lock, account_id, api_key, api_secret, proxy):
     balance_info_text = get_coin_balance(api_key, api_secret, proxy, TOKEN)
     balance_info = json.loads(balance_info_text)
 
     if 'result' in balance_info and 'balance' in balance_info['result']:
         balance = float(balance_info['result']['balance']['walletBalance'])
-        color = RED if threshold is not None and balance < threshold else GREEN
-        balance_output = color_text(f"Баланс {TOKEN} на аккаунте {account_id}: {balance}", color)
+        color = RED if THRESHOLD is not None and balance < THRESHOLD else GREEN
+        balance_output = f"{color_text(f'Баланс {TOKEN} на аккаунте {account_id}: {balance}', color)}"
     else:
-        balance_output = color_text(f"Не удалось получить баланс для аккаунта {account_id}: {balance_info_text}", RED)
+        balance_output = f"{color_text(f'Не удалось получить баланс для аккаунта {account_id}: {balance_info_text}', RED)}"
+        balance = 0  # Если баланс получить не удалось, считаем его нулевым
 
     with lock:
-        results[account_id] = balance_output
+        results[account_id] = {"text": balance_output, "value": balance}
 
 def main():
     accounts = load_accounts()
@@ -108,23 +110,31 @@ def main():
     results = {}
 
     threads = []
-    for account_id, api_key, api_secret, proxy in accounts:
-        thread = Thread(target=process_account, args=(results, lock, account_id, api_key, api_secret, proxy))
+    for account_data in accounts:
+        account_id = account_data[0]  # Получение ID аккаунта
+        thread = Thread(target=process_account, args=(results, lock, account_id) + account_data[1:])
         threads.append(thread)
         thread.start()
-        # Генерируем случайную задержку в пределах ACCOUNT_DELAY_RANGE
         random_delay = random.randint(*ACCOUNT_DELAY_RANGE)
         time.sleep(random_delay)
 
     for thread in threads:
         thread.join()
 
-    # Вывод и запись результатов в упорядоченном виде
+    total_balance = 0
     with open(output_filename, 'w') as file:
-        for account_id, api_key, api_secret, proxy in accounts:
-            output = results.get(account_id, f"Нет данных для аккаунта {account_id}")
+        for account_data in accounts:
+            account_id = account_data[0]  # Получение ID аккаунта
+            result = results.get(account_id, {"text": f"Нет данных для аккаунта {account_id}", "value": 0})
+            output = result["text"]
             print(output)
-            file.write(output.strip(RED).strip(GREEN).strip(ENDC) + "\n")  # Удаление ANSI кодов при записи в файл
+            file.write(f"{output.strip(RED).strip(GREEN).strip(ENDC)}\n")  # Удаление ANSI кодов при записи в файл
+            total_balance += result["value"]  # Подсчет общего баланса
+
+        # Вывод и запись общего баланса желтым цветом
+        total_balance_output = color_text(f"Общий баланс всех аккаунтов: {total_balance}", YELLOW)
+        print(total_balance_output)
+        file.write(f"\n{total_balance_output.strip(ENDC)}")  # Запись в файл без ANSI кодов
 
 if __name__ == "__main__":
     main()
