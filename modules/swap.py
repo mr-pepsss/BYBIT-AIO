@@ -14,7 +14,7 @@ import os
 # Добавление пути к корневой директории проекта в sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from config import (TOKEN_1, TOKEN_2, TRADE_DIRECTION, EXCHANGE_AMOUNT, 
-                    MAX_RETRIES, DELAY_BETWEEN_RETRIES,ACCOUNT_DELAY_RANGE)
+                    MAX_RETRIES, DELAY_BETWEEN_RETRIES, DECIMAL_PLACES, ACCOUNT_DELAY_RANGE)
 
 SYMBOL_TO_TRADE = TOKEN_1 + TOKEN_2
 
@@ -91,11 +91,12 @@ def create_unique_order_link_id():
     return f"order_{current_milliseconds}_{random_number}"
 
 # Функция для размещения рыночного ордера
-def place_market_order(api_key, api_secret, symbol, side, quantity, proxy, decimal_places):
+def place_market_order(api_key, api_secret, symbol, side, quantity, proxy):
     timestamp = str(int(time.time() * 1000))
     recv_window = "20000"
 
-    formatted_quantity = format_number(float(quantity), decimal_places)
+    # Использование DECIMAL_PLACES из файла конфигурации
+    formatted_quantity = format_number(float(quantity), DECIMAL_PLACES)
 
     print_green(f"Отправляемый запрос с количеством: {formatted_quantity}")
 
@@ -128,12 +129,12 @@ def place_market_order(api_key, api_secret, symbol, side, quantity, proxy, decim
     return response.text
 
 # Функция для размещения рыночного ордера с повторными попытками
-def attempt_place_market_order(api_key, api_secret, symbol, side, quantity, proxy, decimal_places, account_id):
+def attempt_place_market_order(api_key, api_secret, symbol, side, quantity, proxy, account_id):
     retries = 0
     while retries < MAX_RETRIES:
         print_yellow(f"Используемое количество для торговли на попытке {retries + 1}: {quantity}")
         order_response_text = place_market_order(
-            api_key, api_secret, SYMBOL_TO_TRADE, TRADE_DIRECTION, quantity, proxy, decimal_places
+            api_key, api_secret, symbol, side, quantity, proxy
         )
 
 
@@ -176,33 +177,31 @@ def load_accounts(filename='accounts.txt'):
             accounts.append((account_id, api_key, api_secret, proxy))
     return accounts
 
+# Функция для обработки аккаунта
 def process_account(account_id, api_key, api_secret, proxy):
     print_yellow(f"Работаем с аккаунтом: {account_id}")
 
     coin_to_check = TOKEN_1 if TRADE_DIRECTION == "SELL" else TOKEN_2
     print(f"Проверяем токен: {coin_to_check}")
 
-    balance_info_text = get_coin_balance(api_key, api_secret, proxy, coin_to_check, 'UNIFIED') # вместо UNIFIED Может быть SPOT
+    balance_info_text = get_coin_balance(api_key, api_secret, proxy, coin_to_check, 'UNIFIED') # Используйте 'SPOT' или другой тип счета, если нужно
     balance_info = json.loads(balance_info_text)
 
     if 'result' in balance_info and 'balance' in balance_info['result']:
         balance = balance_info['result']['balance']['walletBalance']
 
-        # Задаем количество знаков после запятой
-        decimal_places = 4
-        print(f"Баланс токена на аккаунте {account_id}: {coin_to_check}: {balance}")
-
-        decimal_places = 4
-        if float(balance) < 1 / (10 ** decimal_places):
-            print_red(f"Баланс меньше, чем минимально допустимое количество знаков после запятой для торговли: {decimal_places} знаков")
+        # Использование DECIMAL_PLACES из файла конфигурации
+        if float(balance) < 1 / (10 ** DECIMAL_PLACES):
+            print_red(f"Баланс меньше, чем минимально допустимое количество знаков после запятой для торговли: {DECIMAL_PLACES} знаков")
         else:
             quantity = EXCHANGE_AMOUNT if EXCHANGE_AMOUNT is not None else balance
             print(f"Используемое количество для торговли: {quantity}")
-            # Использование новой функции с попытками
+
+            # Использование функции с попытками
             success, order_response_text = False, ''
             for attempt in range(MAX_RETRIES):
                 order_response_text = attempt_place_market_order(
-                    api_key, api_secret, SYMBOL_TO_TRADE, TRADE_DIRECTION, quantity, proxy, decimal_places, account_id
+                    api_key, api_secret, SYMBOL_TO_TRADE, TRADE_DIRECTION, quantity, proxy, account_id
                 )
                 order_response = json.loads(order_response_text)
                 if order_response['retCode'] == 0:
@@ -213,17 +212,11 @@ def process_account(account_id, api_key, api_secret, proxy):
                     time.sleep(DELAY_BETWEEN_RETRIES)
 
             if success:
-                second_token = TOKEN_2 if TRADE_DIRECTION == "SELL" else TOKEN_1
-                second_balance_text = get_coin_balance(api_key, api_secret, proxy, second_token, 'UNIFIED') # вместо UNIFIED Может быть SPOT
-                second_balance_info = json.loads(second_balance_text)
-                second_balance = second_balance_info['result']['balance']['walletBalance']
-                print_yellow(f"Баланс {second_token} на аккаунте {account_id}: {second_balance} {second_token}")
                 print_green(f"Ответ сервера для аккаунта {account_id}: {order_response_text}")
             else:
                 print_red(f"Все попытки размещения ордера неудачны, аккаунт {account_id}")
     else:
         print_red(f"Не удалось получить баланс для аккаунта {account_id}: {balance_info_text}")
-
 
 def main():
     accounts = load_accounts()
