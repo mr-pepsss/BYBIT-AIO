@@ -11,7 +11,7 @@ import os
 
 # Добавление пути к корневой директории проекта в sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from config import (CHOSEN_TOKEN_WITHDRAW, DESIRED_NETWORK, ACCOUNT_DELAY_RANGE)
+from config import CHOSEN_TOKEN_WITHDRAW, DESIRED_NETWORK, ACCOUNT_DELAY_RANGE, WITHDRAW_AMOUNT
 
 # ANSI escape codes
 GREEN = "\033[92m"
@@ -143,20 +143,27 @@ def main(credentials, lock: threading.Lock):
             print_red(f"Ошибка получения баланса на аккаунте номер {ACC_NUM}: {str(e)}")
         return
 
-    token_balance = round(token_balance - 0.0001, 4)
+    # Проверка, задан ли фиксированный объем вывода
+    if WITHDRAW_AMOUNT is None:
+        withdraw_amount = token_balance - 0.0001  # оставляем небольшой остаток для избежания ошибок точности
+    else:
+        withdraw_amount = min(WITHDRAW_AMOUNT, token_balance - 0.0001)  # не выводим больше, чем есть на балансе
+
+    withdraw_amount = round(withdraw_amount, 4)  # Округление до 4 знаков после запятой
+
     with lock:
         print_yellow(f"Текущий баланс {CHOSEN_TOKEN_WITHDRAW} на аккаунте номер {ACC_NUM} в FUND: {token_balance:.8f}")
+        print_yellow(f"Сумма для вывода: {withdraw_amount:.8f} {CHOSEN_TOKEN_WITHDRAW}")
 
-    if token_balance > 0:
+    if withdraw_amount > 0:
         try:
             # Попытка вывода
-            transaction_id = withdraw_from_bybit(API_KEY, API_SECRET, CHOSEN_TOKEN_WITHDRAW, DESIRED_NETWORK, WITHDRAW_ADDRESS, token_balance, my_proxies)
+            transaction_id = withdraw_from_bybit(API_KEY, API_SECRET, CHOSEN_TOKEN_WITHDRAW, DESIRED_NETWORK, WITHDRAW_ADDRESS, withdraw_amount, my_proxies)
             with lock:
-                print_green(f"Вывод на аккаунте номер {ACC_NUM} прошел успешно. Сумма: {token_balance:.8f} {CHOSEN_TOKEN_WITHDRAW}. Идентификатор транзакции: {transaction_id}")
+                print_green(f"Вывод на аккаунте номер {ACC_NUM} прошел успешно. Сумма: {withdraw_amount:.8f} {CHOSEN_TOKEN_WITHDRAW}. Идентификатор транзакции: {transaction_id}")
         except Exception as e:
             with lock:
                 print_red(f"Ошибка вывода на аккаунте номер {ACC_NUM}. Сообщение: {str(e)}")
-
 
 def load_credentials_from_file(filename: str) -> list:
     credentials = []
