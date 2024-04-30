@@ -12,7 +12,7 @@ import os
 # Добавление пути к корневой директории проекта в sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from config import CHOSEN_TOKEN, FROM_ACCOUNT_TYPE, TO_ACCOUNT_TYPE, ACCOUNT_DELAY_RANGE
+from config import CHOSEN_TOKEN, FROM_ACCOUNT_TYPE, TO_ACCOUNT_TYPE, ACCOUNT_DELAY_RANGE, TRANSFER_AMOUNT
 
 # ANSI escape codes
 GREEN = "\033[92m"
@@ -105,18 +105,27 @@ def main(credentials, lock: threading.Lock):
             print_red(f"Ошибка при получении баланса на аккаунте номер {ACC_NUM}: {str(e)}")
         return
 
-    token_balance = round(token_balance - 0.0001, 4)
+    # Проверка, задан ли фиксированный объем перевода
+    if TRANSFER_AMOUNT is None:
+        transfer_amount = token_balance - 0.0001  # оставляем небольшой остаток для избежания ошибок точности
+    else:
+        transfer_amount = min(TRANSFER_AMOUNT, token_balance - 0.0001)  # не переводим больше, чем есть на балансе
+
+    transfer_amount = round(transfer_amount, 4)  # Округление до 4 знаков после запятой
+
     with lock:
         print_yellow(f"Текущий баланс {CHOSEN_TOKEN} на аккаунте номер {ACC_NUM} в {FROM_ACCOUNT_TYPE}: {token_balance:.8f}")
+        print_yellow(f"Сумма для перевода: {transfer_amount:.8f} {CHOSEN_TOKEN}")
 
-    if token_balance > 0:
+    if transfer_amount > 0:
         transfer_data = {
             "transferId": str(uuid.uuid4()).replace('-', ''),
             "coin": CHOSEN_TOKEN,
-            "amount": str(token_balance),
+            "amount": str(transfer_amount),
             "fromAccountType": FROM_ACCOUNT_TYPE,
             "toAccountType": TO_ACCOUNT_TYPE
         }
+
         payload = json.dumps(transfer_data)
         headers = generate_signed_headers(API_KEY, API_SECRET, payload, my_proxies)
         transfer_response = requests.post(BASE_URL + "asset/v3/private/transfer/inter-transfer", headers=headers, data=payload, proxies=my_proxies)
@@ -124,7 +133,7 @@ def main(credentials, lock: threading.Lock):
 
         with lock:
             if transfer_content.get("retCode") == 0:
-                print_green(f"Перевод на аккаунте номер {ACC_NUM} успешно выполнен. Сумма: {token_balance:.8f} {CHOSEN_TOKEN}.")
+                print_green(f"Перевод на аккаунте номер {ACC_NUM} успешно выполнен. Сумма: {transfer_amount:.8f} {CHOSEN_TOKEN}.")
             else:
                 print_red(f"Ошибка перевода на аккаунте номер {ACC_NUM}. Сообщение: {transfer_content.get('retMsg')}")
 
