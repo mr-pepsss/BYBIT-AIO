@@ -25,6 +25,9 @@ def run_network_module():
 def run_upgrade_to_uta_module():
     subprocess.run([sys.executable, 'modules/upgrade_to_uta.py'])
 
+def run_get_address_module():
+    subprocess.run([sys.executable, 'modules/get_address.py'])
+
 def main():
     while True:
         print("Выберите модуль для запуска:")
@@ -35,8 +38,9 @@ def main():
         print("5. Свап в любой паре на МАРЖЕ")
         print("6. Вывод с биржи")
         print("7. Узнать доступные сети для вывода")
-        print("8. Обновление аккаунтов до UTA")
-        print("9. Выход")
+        print("8. Узнать адрес для депозита")
+        print("9. Обновление аккаунтов до UTA")
+        print("10. Выход")
 
         choice = input("Введите номер модуля: ")
 
@@ -55,8 +59,10 @@ def main():
         elif choice == '7':
             run_network_module()
         elif choice == '8':
-            run_upgrade_to_uta_module()
+            run_get_address_module()   
         elif choice == '9':
+            run_upgrade_to_uta_module()
+        elif choice == '10':
             print("Выход из программы.")
             break
         else:
