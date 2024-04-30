@@ -122,16 +122,17 @@ def main():
     # Запись результатов в CSV файл и сортировка по account_id перед выводом
     with open('deposit_addresses.csv', mode='w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
-        writer.writerow(['Account ID', 'Chain', 'Deposit Address'])
+        writer.writerow(['Account ID', 'Chain', 'Token', 'Deposit Address'])  # Добавлен столбец "Token"
         # Сортировка результатов по целочисленному значению account_id
         for account_id in sorted(results.keys(), key=int):
             result = results[account_id]
             chain = CHAIN
+            token = COIN  # Получаем токен из конфигурации
             if "в сети" in result:
                 address = result.split(': ')[-1]
             else:
                 address = "Error or no address"
-            writer.writerow([account_id, chain, address])
+            writer.writerow([account_id, chain, token, address])  # Записываем токен вместе с другими данными
             print(result)  # Вывод отсортированных результатов
 
 if __name__ == "__main__":
