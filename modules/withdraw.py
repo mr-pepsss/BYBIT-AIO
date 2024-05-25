@@ -78,12 +78,12 @@ def get_balance(api_key, api_secret, account_type, my_proxies) -> float:
 
     return float(content['result']['balance']['walletBalance'])
 
-def withdraw_from_bybit(api_key, api_secret, coin, chain, address, amount, my_proxies):
+def withdraw_from_bybit(api_key, api_secret, coin, chain, address, amount, my_proxies, tag=None):
     """
     Вывести активы из аккаунта Bybit.
     """
     # Конечная точка
-    endpoint = "asset/v3/private/withdraw/create"
+    endpoint = "v5/asset/withdraw/create"
     
     # Текущее время
     timestamp = int(time.time() * 1000)
@@ -99,6 +99,9 @@ def withdraw_from_bybit(api_key, api_secret, coin, chain, address, amount, my_pr
         "accountType": "FUND",  # Кошелек финансирования
         "feeType": 1  # Система автоматически удержит комиссию
     }
+    
+    if tag:
+        data["tag"] = tag
     
     # Создать подписанные заголовки
     headers = generate_signed_headers(api_key, api_secret, data, my_proxies, request_type="POST")
@@ -122,6 +125,7 @@ def main(credentials, lock: threading.Lock):
     PROXY_PASSWORD = PROXY_DATA[3]
     ACC_NUM = credentials['id']
     WITHDRAW_ADDRESS = credentials['withdraw_address']
+    TAG = credentials['tag']
 
     proxy_data = f"{PROXY_IP}:{PROXY_PORT}:{PROXY_LOGIN}:{PROXY_PASSWORD}"
 
@@ -158,7 +162,7 @@ def main(credentials, lock: threading.Lock):
     if withdraw_amount > 0:
         try:
             # Попытка вывода
-            transaction_id = withdraw_from_bybit(API_KEY, API_SECRET, CHOSEN_TOKEN_WITHDRAW, DESIRED_NETWORK, WITHDRAW_ADDRESS, withdraw_amount, my_proxies)
+            transaction_id = withdraw_from_bybit(API_KEY, API_SECRET, CHOSEN_TOKEN_WITHDRAW, DESIRED_NETWORK, WITHDRAW_ADDRESS, withdraw_amount, my_proxies, tag=TAG)
             with lock:
                 print_green(f"Вывод на аккаунте номер {ACC_NUM} прошел успешно. Сумма: {withdraw_amount:.8f} {CHOSEN_TOKEN_WITHDRAW}. Идентификатор транзакции: {transaction_id}")
         except Exception as e:
@@ -170,7 +174,7 @@ def load_credentials_from_file(filename: str) -> list:
     with open(filename, 'r') as file:
         for index, line in enumerate(file.readlines()):
             parts = line.strip().split(":")
-            if len(parts) < 8:  
+            if len(parts) < 9:  
                 print_red(f"Ошибка в строке {index + 1}: недостаточно данных!")
                 continue
             account_info = {
@@ -178,7 +182,8 @@ def load_credentials_from_file(filename: str) -> list:
                 'api_key': parts[1],
                 'api_secret': parts[2],
                 'proxy': ':'.join(parts[3:7]),
-                'withdraw_address': parts[7]
+                'withdraw_address': parts[7],
+                'tag': parts[8] if len(parts) > 8 else None
             }
             credentials.append(account_info)
     return credentials
