@@ -4,7 +4,6 @@ import hmac
 import json
 import hashlib
 import random
-import uuid
 import threading
 import sys
 import os
@@ -174,16 +173,16 @@ def load_credentials_from_file(filename: str) -> list:
     with open(filename, 'r') as file:
         for index, line in enumerate(file.readlines()):
             parts = line.strip().split(":")
-            if len(parts) < 9:  
+            if len(parts) < 8:  # Минимум 8 частей, без тега
                 print_red(f"Ошибка в строке {index + 1}: недостаточно данных!")
                 continue
             account_info = {
                 'id': int(parts[0]),
                 'api_key': parts[1],
                 'api_secret': parts[2],
-                'proxy': ':'.join(parts[3:7]),
-                'withdraw_address': parts[7],
-                'tag': parts[8] if len(parts) > 8 else None
+                'proxy': ':'.join(parts[3:7]),  # Прокси состоит из 4 частей
+                'withdraw_address': parts[7],  # Адрес вывода
+                'tag': parts[8] if len(parts) > 8 else None  # Тег, если он указан
             }
             credentials.append(account_info)
     return credentials
