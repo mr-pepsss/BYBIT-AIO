@@ -122,7 +122,7 @@ def main():
         thread.join()
 
     total_balance = 0
-    with open(output_filename, 'w') as file:
+    with open(output_filename, 'w', encoding='utf-8') as file:
         for account_data in accounts:
             account_id = account_data[0]  # Получение ID аккаунта
             result = results.get(account_id, {"text": f"Нет данных для аккаунта {account_id}", "value": 0})
