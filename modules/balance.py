@@ -26,13 +26,24 @@ def color_text(text, color_code):
 def get_server_time(proxy):
     url = 'https://api.bybit.com/v5/market/time'
     try:
-        response = requests.get(url, proxies=proxy)
+        # Проверка корректности прокси перед запросом
+        if proxy.get("http", "").startswith("http://") or proxy.get("https", "").startswith("https://"):
+            response = requests.get(url, proxies=proxy)
+        else:
+            raise ValueError("Неверный формат прокси URL")
+
         if response.status_code == 200:
             data = response.json()
             return int(data['result']['timeSecond']) * 1000
-        raise Exception(f"Ошибка запроса: {response.status_code}")
+        else:
+            raise Exception(f"Ошибка запроса: {response.status_code}")
+    except requests.exceptions.InvalidURL as e:
+        print(f"Ошибка в формате URL: {e}")
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка при запросе: {e}")
     except Exception as e:
-        raise
+        print(f"Произошла ошибка: {e}")
+    return None
 
 def generate_signature(api_key, api_secret, timestamp, recv_window, params, method='GET'):
     sign_str = f"{timestamp}{api_key}{recv_window}"
@@ -45,6 +56,8 @@ def generate_signature(api_key, api_secret, timestamp, recv_window, params, meth
 
 def get_coin_balance(api_key, api_secret, proxy, coin, accountType=ACCOUNT_TYPE):
     timestamp = get_server_time(proxy)
+    if not timestamp:
+        return None
     recv_window = "20000"
     params = {"accountType": accountType, "coin": coin}
 
@@ -56,8 +69,14 @@ def get_coin_balance(api_key, api_secret, proxy, coin, accountType=ACCOUNT_TYPE)
         "X-BAPI-RECV-WINDOW": recv_window,
     }
     url = "https://api.bybit.com/v5/asset/transfer/query-account-coin-balance?" + urlencode(params)
-    response = requests.get(url, headers=headers, proxies=proxy)
-    return response.text
+    
+    try:
+        response = requests.get(url, headers=headers, proxies=proxy)
+        response.raise_for_status()
+        return response.text
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка при запросе баланса: {e}")
+        return None
 
 def load_accounts(filename='accounts.txt'):
     accounts = []
@@ -90,15 +109,21 @@ def write_to_file(lock, filename, text):
 
 def process_account(results, lock, account_id, api_key, api_secret, proxy):
     balance_info_text = get_coin_balance(api_key, api_secret, proxy, TOKEN)
-    balance_info = json.loads(balance_info_text)
-
-    if 'result' in balance_info and 'balance' in balance_info['result']:
-        balance = float(balance_info['result']['balance']['walletBalance'])
-        color = RED if THRESHOLD is not None and balance < THRESHOLD else GREEN
-        balance_output = f"{color_text(f'Баланс {TOKEN} на аккаунте {account_id}: {balance}', color)}"
+    
+    # Обработка случая, если запрос вернул None
+    if balance_info_text is None:
+        balance_output = f"{color_text(f'Не удалось получить баланс для аккаунта {account_id}: Проблема с запросом', RED)}"
+        balance = 0
     else:
-        balance_output = f"{color_text(f'Не удалось получить баланс для аккаунта {account_id}: {balance_info_text}', RED)}"
-        balance = 0  # Если баланс получить не удалось, считаем его нулевым
+        balance_info = json.loads(balance_info_text)
+
+        if 'result' in balance_info and 'balance' in balance_info['result']:
+            balance = float(balance_info['result']['balance']['walletBalance'])
+            color = RED if THRESHOLD is not None and balance < THRESHOLD else GREEN
+            balance_output = f"{color_text(f'Баланс {TOKEN} на аккаунте {account_id}: {balance}', color)}"
+        else:
+            balance_output = f"{color_text(f'Не удалось получить баланс для аккаунта {account_id}: {balance_info_text}', RED)}"
+            balance = 0  # Если баланс получить не удалось, считаем его нулевым
 
     with lock:
         results[account_id] = {"text": balance_output, "value": balance}
